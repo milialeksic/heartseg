@@ -47,3 +47,4 @@ Left atrium segmentation, MSD Task02 Heart (mono-modal cardiac MRI, 20 labelled 
   cases. All folds are retrained and re-evaluated with identical settings; the earlier runs are
   kept as "v1" and labelled as affected by this bug. Overlay panel titles changed to neutral
   axis names because the nominal RAS headers do not match the true anatomy. Test set untouched.
+[text](outputs/eval/unet_fold0_test_lcc.csv) [text](outputs/eval/unet_fold1_test_lcc.csv) [text](outputs/eval/unet_fold2_test_lcc.csv) [text](outputs/eval/unet_fold3_test_lcc.csv) [text](outputs/eval/unet_foldensemble_test_lcc.csv)
