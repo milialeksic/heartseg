@@ -30,6 +30,10 @@ eval:
   save_overlays: true     # PNG slice overlays per case
   save_pred: false        # NIfTI image/gt/pred per case, for 3D Slicer / ITK-SNAP
 
+serve:                    # uvicorn medseg.api:app
+  folds: [0, 1, 2, 3]     # ensemble members (checkpoints/<model>-fold<k>/best.pt)
+  postprocess: lcc        # final pipeline
+
 robustness:               # python -m medseg.robustness (CV cases only)
   out_dir: outputs/robustness
   results_dir: results/robustness
