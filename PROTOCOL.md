@@ -79,3 +79,11 @@ Left atrium segmentation, MSD Task02 Heart (mono-modal cardiac MRI, 20 labelled 
   motion, thicker slices along axis 2. Reported per condition: mean Dice, paired change in Dice
   versus the clean image, worst-case Dice, mean HD95. Descriptive only: no model, preprocessing
   or post-processing change is made based on these results.
+- 2026-10-05: Fix to the robustness analysis (not to the model). First run: noise and motion
+  appeared to improve Dice slightly (+0.003 to +0.008) at every severity. Cause: they put
+  non-zero values into the zero-valued area outside the scanned field, so
+  NormalizeIntensityd(nonzero=True) normalised over a different set of voxels than for the clean
+  image, a confound unrelated to the perturbation itself. Fix: voxels that are zero in the
+  original image are kept at zero after every perturbation, and no new zeros are created inside
+  the scanned area (unit-tested). All conditions are re-run with identical settings; the first
+  run is kept but not reported.

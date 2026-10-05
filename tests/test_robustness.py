@@ -29,6 +29,18 @@ def test_shape_preserved_finite_and_changed(kind, severity):
     assert not torch.allclose(y, x)
 
 
+@pytest.mark.parametrize(
+    "kind,severity",
+    [("noise", 0.2), ("bias", 0.5), ("gamma", 0.3), ("motion", 10.0), ("lowres", 4.0)],
+)
+def test_background_stays_zero_and_scanned_area_nonzero(kind, severity):
+    # Same nonzero region before and after, so NormalizeIntensityd(nonzero=True) uses the
+    # same voxels as for the clean image.
+    x = _img()
+    y = apply_perturbation(x, kind, severity, seed=1)
+    assert torch.equal(y == 0, x == 0)
+
+
 @pytest.mark.parametrize("kind,severity", [("noise", 0.1), ("bias", 0.5), ("motion", 5.0)])
 def test_deterministic_given_seed(kind, severity):
     x = _img()

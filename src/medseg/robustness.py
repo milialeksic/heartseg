@@ -45,26 +45,36 @@ def apply_perturbation(
         raise ValueError(f"Unknown perturbation {kind!r}; choose from {KINDS}")
 
     x = img.float()
+    # Zero-valued voxels lie outside the scanned field of view. They are kept at zero so the
+    # perturbation affects only the scanned area and NormalizeIntensityd(nonzero=True) uses the
+    # same voxels as for the clean image. Otherwise noise or motion ghosting in that area would
+    # change the normalisation itself and confound the result.
+    background = x == 0
+
     if kind == "noise":
-        fg = x[x > 0]
+        fg = x[~background]
         sigma = severity * (fg.std() if fg.numel() > 1 else x.std())
         gen = torch.Generator().manual_seed(seed)
-        return x + torch.randn(x.shape, generator=gen) * sigma
+        out = x + torch.randn(x.shape, generator=gen) * sigma
+    else:
+        torch.manual_seed(seed)  # TorchIO samples its random parameters from torch's RNG
+        aff = np.eye(4) if affine is None else np.asarray(affine, dtype=float)
+        if kind == "gamma":
+            x = x.clamp(min=0)  # gamma needs non-negative intensities
+        image = tio.ScalarImage(tensor=x, affine=aff)
+        if kind == "bias":
+            t = tio.RandomBiasField(coefficients=severity, order=3)
+        elif kind == "gamma":
+            t = tio.RandomGamma(log_gamma=(severity, severity))
+        elif kind == "motion":
+            t = tio.RandomMotion(degrees=severity, translation=severity, num_transforms=2)
+        else:  # lowres
+            t = tio.RandomAnisotropy(axes=(2,), downsampling=(severity, severity))
+        out = t(image).data.float()
 
-    torch.manual_seed(seed)  # TorchIO samples its random parameters from torch's RNG
-    aff = np.eye(4) if affine is None else np.asarray(affine, dtype=float)
-    if kind == "gamma":
-        x = x.clamp(min=0)  # gamma needs non-negative intensities
-    image = tio.ScalarImage(tensor=x, affine=aff)
-    if kind == "bias":
-        t = tio.RandomBiasField(coefficients=severity, order=3)
-    elif kind == "gamma":
-        t = tio.RandomGamma(log_gamma=(severity, severity))
-    elif kind == "motion":
-        t = tio.RandomMotion(degrees=severity, translation=severity, num_transforms=2)
-    else:  # lowres
-        t = tio.RandomAnisotropy(axes=(2,), downsampling=(severity, severity))
-    return t(image).data.float()
+    out = out.masked_fill(background, 0.0)
+    # The perturbation must not create new exact zeros inside the scanned area either.
+    return torch.where(~background & (out == 0), torch.full_like(out, 1e-6), out)
 
 
 class PerturbImage:
