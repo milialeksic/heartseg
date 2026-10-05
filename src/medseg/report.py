@@ -2,8 +2,8 @@
 
 Usage (from repo root):
     python -m medseg.report outputs/eval/unet_foldall_val.csv
-    python -m medseg.report outputs/eval/unet_foldall_val.csv outputs/eval/unet_foldall_val_lcc.csv \
-        --labels "UNet" "UNet + largest component"
+    python -m medseg.report outputs/eval/unet_foldall_val.csv \
+        outputs/eval/unet_foldall_val_lcc.csv --labels "UNet" "UNet + largest component"
 
 Writes to results/ (commit this folder):
     summary.md                      tables to paste into the README
@@ -109,7 +109,7 @@ def main() -> None:
     base = frames[0].sort_values("dice")
     picks = list(base["case_id"].head(args.n_overlays)) + [base["case_id"].iloc[-1]]
     copied = []
-    for c, label in zip(paths, labels):
+    for c, label in zip(paths, labels, strict=True):
         src_dir = c.with_suffix("") / "overlays"
         for cid in picks:
             src = src_dir / f"{cid}.png"
@@ -119,7 +119,7 @@ def main() -> None:
                 copied.append((label, cid, dst.name))
 
     md = ["# Results", ""]
-    for df, label in zip(frames, labels):
+    for df, label in zip(frames, labels, strict=True):
         md += [f"## {label}", "", f"n = {len(df)} cases", "", summary_table(df), ""]
         md += ["### Per fold", "", per_fold_table(df), ""]
         md += ["### Worst cases by Dice", "", worst_cases(df), ""]

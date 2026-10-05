@@ -1,10 +1,10 @@
 """Per-case evaluation of trained checkpoints.
 
 Usage (from repo root):
-    python -m medseg.eval fold=all                          # out-of-fold results, all CV cases
-    python -m medseg.eval fold=all eval.postprocess=lcc     # same, keeping the largest component
-    python -m medseg.eval fold=0 split=test                 # held-out test set -- use once, at the end
-    python -m medseg.eval fold=all eval.save_pred=true      # also write NIfTI image/gt/pred per case
+        python -m medseg.eval fold=all                       # out-of-fold results, all CV cases
+    python -m medseg.eval fold=all eval.postprocess=lcc  # same, keep largest component
+    python -m medseg.eval fold=0 split=test              # held-out test set, use once
+    python -m medseg.eval fold=all eval.save_pred=true   # also write NIfTI per case
     python -m medseg.eval fold=ensemble split=test eval.postprocess=lcc
         # mean-softmax ensemble of all fold models; test set only, because every CV case
         # was seen in training by the other fold models
@@ -242,18 +242,31 @@ def evaluate_ids(
     return pd.DataFrame(rows)
 
 
-def evaluate_fold(cfg, fold: int, split: str, device, case_dir: Path) -> pd.DataFrame:
-    splits = load_or_create_splits(
+def _splits(cfg) -> dict:
+    return load_or_create_splits(
         cfg.data.root, cfg.data.split_file, cfg.data.n_test, cfg.data.n_folds, cfg.seed
     )
-    ids = splits["test"] if split == "test" else splits["folds"][fold]["val"]
 
+
+def load_model(cfg, fold: int, device):
     ckpt = Path("checkpoints") / f"{cfg.model.name}-fold{fold}" / "best.pt"
     if not ckpt.exists():
         raise FileNotFoundError(f"No checkpoint at {ckpt}. Train this fold first.")
     model = build_model(cfg).to(device)
     model.load_state_dict(torch.load(ckpt, map_location=device, weights_only=True))
-    return evaluate_ids(cfg, model, ids, device, fold, split, case_dir)
+    return model.eval()
+
+
+def evaluate_fold(cfg, fold: int, split: str, device, case_dir: Path) -> pd.DataFrame:
+    splits = _splits(cfg)
+    ids = splits["test"] if split == "test" else splits["folds"][fold]["val"]
+    return evaluate_ids(cfg, [load_model(cfg, fold, device)], ids, device, fold, split, case_dir)
+
+
+def evaluate_ensemble(cfg, device, case_dir: Path) -> pd.DataFrame:
+    """Mean-softmax ensemble of all fold models on the held-out test set."""
+    models = [load_model(cfg, f, device) for f in range(int(cfg.data.n_folds))]
+    return evaluate_ids(cfg, models, _splits(cfg)["test"], device, "ensemble", "test", case_dir)
 
 
 def main() -> None:
@@ -268,17 +281,24 @@ def main() -> None:
         raise ValueError("For split=test choose one fold, e.g. fold=0")
     if post not in ("none", "lcc"):
         raise ValueError("eval.postprocess must be 'none' or 'lcc'")
+    if fold_arg == "ensemble" and split != "test":
+        raise ValueError(
+            "fold=ensemble is only valid with split=test: every CV case was seen in training "
+            "by the other fold models, so an ensemble cannot be evaluated fairly on CV."
+        )
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    folds = list(range(int(cfg.data.n_folds))) if fold_arg == "all" else [int(fold_arg)]
-
     out_dir = Path(cfg.eval.out_dir)
     tag = f"{cfg.model.name}_fold{fold_arg}_{split}" + ("_lcc" if post == "lcc" else "")
     case_dir = out_dir / tag
 
-    df = pd.concat(
-        [evaluate_fold(cfg, f, split, device, case_dir) for f in folds], ignore_index=True
-    )
+    if fold_arg == "ensemble":
+        df = evaluate_ensemble(cfg, device, case_dir)
+    else:
+        folds = list(range(int(cfg.data.n_folds))) if fold_arg == "all" else [int(fold_arg)]
+        df = pd.concat(
+            [evaluate_fold(cfg, f, split, device, case_dir) for f in folds], ignore_index=True
+        )
     df["git_commit"] = git_commit()
 
     out_dir.mkdir(parents=True, exist_ok=True)

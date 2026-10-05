@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from monai.networks.nets import UNet, SegResNet
+from monai.networks.nets import SegResNet, UNet
 
 
 def build_model(cfg):

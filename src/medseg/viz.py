@@ -51,7 +51,7 @@ def save_overlay(image, gt, pred, spacing, path, title: str) -> None:
         ("Projection along axis 2", img[:, :, c[2]], gt.any(2), pred.any(2), sy / sx),
     ]
     fig, axes = plt.subplots(1, 4, figsize=(16, 4.6), facecolor=SURFACE)
-    for ax, (name, im, g, p, aspect) in zip(axes, views):
+    for ax, (name, im, g, p, aspect) in zip(axes, views, strict=True):
         ax.imshow(im.T, cmap="gray", origin="lower", aspect=aspect, interpolation="nearest")
         if g.any():
             ax.contour(g.T, levels=[0.5], colors=GT_COLOR, linewidths=1.6)
@@ -88,10 +88,10 @@ def per_case_chart(
         s = df.set_index("case_id")[metric].astype(float)
         vals.append(np.array([s.get(cid, np.nan) for cid in order]))
     if len(vals) == 2:
-        for yi, a, b in zip(y, vals[0], vals[1]):
+        for yi, a, b in zip(y, vals[0], vals[1], strict=True):
             if np.isfinite(a) and np.isfinite(b):
                 ax.plot([a, b], [yi, yi], color=CONNECTOR, lw=2, zorder=1)
-    for i, (v, label) in enumerate(zip(vals, labels)):
+    for i, (v, label) in enumerate(zip(vals, labels, strict=True)):
         ax.scatter(
             v, y, s=46, color=SERIES[i], edgecolor=SURFACE, linewidth=2, zorder=2 + i, label=label
         )
