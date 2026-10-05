@@ -47,4 +47,35 @@ Left atrium segmentation, MSD Task02 Heart (mono-modal cardiac MRI, 20 labelled 
   cases. All folds are retrained and re-evaluated with identical settings; the earlier runs are
   kept as "v1" and labelled as affected by this bug. Overlay panel titles changed to neutral
   axis names because the nominal RAS headers do not match the true anatomy. Test set untouched.
-[text](outputs/eval/unet_fold0_test_lcc.csv) [text](outputs/eval/unet_fold1_test_lcc.csv) [text](outputs/eval/unet_fold2_test_lcc.csv) [text](outputs/eval/unet_fold3_test_lcc.csv) [text](outputs/eval/unet_foldensemble_test_lcc.csv)
+- 2026-10-05: v2 CV results (native spacing): UNet Dice 0.876 ± 0.045, HD95 42.3 mm;
+  with largest-connected-component post-processing Dice 0.882 ± 0.041, HD95 8.5 ± 4.7 mm.
+  Final pipeline frozen before any test-set evaluation:
+  - Model: 3D UNet, v2 preprocessing (spacing 1.25 × 1.25 × 1.37 mm), best checkpoint per fold.
+  - Post-processing: keep the largest connected component.
+  - Headline test result: mean-softmax ensemble of the four fold models
+    (`python -m medseg.eval fold=ensemble split=test eval.postprocess=lcc`).
+  - Also reported: each fold model individually on the test set (fold=0..3), mean ± SD over models.
+  - The ensemble cannot be validated on CV (each CV case was seen by three of the four models);
+    it is chosen as standard practice, not on measured CV benefit.
+  - The test set is evaluated once. No change to model, post-processing or thresholds is made
+    based on test results.
+- 2026-10-05: Test set evaluated once, with the pipeline frozen in the entry above
+  (commit c9dca16). Results, largest-component post-processing, n = 4 cases:
+  - Ensemble (headline): Dice 0.887, HD95 6.1 mm, ASSD 1.5 mm, NSD 0.806.
+  - Individual fold models: Dice 0.877 ± 0.009, HD95 6.8 ± 0.8 mm, NSD 0.782 ± 0.017
+    (mean ± SD over the four models).
+  - Consistent with CV (Dice 0.882, HD95 8.5 mm). The ensemble scored higher than the mean of
+    the individual models on all four cases; with n = 4 this is a tendency, not a demonstrated
+    improvement.
+  - la_009 was under-segmented by all models (recall 0.67–0.80) and showed the largest
+    disagreement between models.
+  - No changes to model, preprocessing, post-processing or thresholds were made after seeing
+    test results. The test set is now considered used; any further development requires new
+    held-out data.
+- 2026-10-05: Robustness analysis, specified before running. Final pipeline (v2 UNet + largest
+  component), each fold model on its own validation cases (out-of-fold, 16 cases). Image
+  perturbed after resampling and before normalisation; labels untouched. Perturbations and
+  severities as in `configs/default.yaml` (`robustness`): Gaussian noise, bias field, gamma,
+  motion, thicker slices along axis 2. Reported per condition: mean Dice, paired change in Dice
+  versus the clean image, worst-case Dice, mean HD95. Descriptive only: no model, preprocessing
+  or post-processing change is made based on these results.

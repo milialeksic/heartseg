@@ -56,13 +56,21 @@ def load_or_create_splits(
     return splits
 
 
-def get_transforms(spacing, patch_size, train: bool) -> Compose:
+def base_transforms(spacing) -> list:
+    """Load, reorient and resample image and label. No intensity changes."""
     keys = ["image", "label"]
-    common = [
+    return [
         LoadImaged(keys=keys),
         EnsureChannelFirstd(keys=keys),
         Orientationd(keys=keys, axcodes="RAS"),
         Spacingd(keys=keys, pixdim=tuple(spacing), mode=("bilinear", "nearest")),
+    ]
+
+
+def get_transforms(spacing, patch_size, train: bool) -> Compose:
+    keys = ["image", "label"]
+    common = [
+        *base_transforms(spacing),
         # MRI: z-score over nonzero voxels (no CT-style HU windowing)
         NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
     ]
