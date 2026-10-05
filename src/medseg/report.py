@@ -101,8 +101,12 @@ def main() -> None:
 
     per_case_chart(frames, labels, "dice", "Dice (higher is better)", figs / "per_case_dice.png")
     per_case_chart(
-        frames, labels, "hd95_mm", "HD95 in mm, log scale (lower is better)",
-        figs / "per_case_hd95.png", log=True,
+        frames,
+        labels,
+        "hd95_mm",
+        "HD95 in mm, log scale (lower is better)",
+        figs / "per_case_hd95.png",
+        log=True,
     )
 
     # Overlays: worst N by Dice plus the best case, from each variant that saved them.

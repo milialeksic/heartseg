@@ -7,9 +7,7 @@ import random
 from pathlib import Path
 
 
-def make_splits(
-    case_ids: list[str], n_test: int = 4, n_folds: int = 4, seed: int = 42
-) -> dict:
+def make_splits(case_ids: list[str], n_test: int = 4, n_folds: int = 4, seed: int = 42) -> dict:
     """Return {"test": [...], "folds": [{"train": [...], "val": [...]}, ...]}."""
     ids = sorted(set(case_ids))
     if len(ids) != len(case_ids):

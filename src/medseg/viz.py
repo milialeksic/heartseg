@@ -108,12 +108,22 @@ def per_case_chart(
     ax.spines["bottom"].set_color(GRID)
     if len(frames) > 1:
         ax.legend(
-            loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=len(frames), frameon=False,
+            loc="lower center",
+            bbox_to_anchor=(0.5, 1.0),
+            ncol=len(frames),
+            frameon=False,
             labelcolor=TEXT_2,
         )
     dropped = len(frames[0]) - len(base)
     if dropped:
-        ax.text(1, -0.12, f"{dropped} case(s) with non-finite value omitted",
-                transform=ax.transAxes, ha="right", color=TEXT_2, fontsize=8)
+        ax.text(
+            1,
+            -0.12,
+            f"{dropped} case(s) with non-finite value omitted",
+            transform=ax.transAxes,
+            ha="right",
+            color=TEXT_2,
+            fontsize=8,
+        )
     fig.savefig(path, dpi=130, bbox_inches="tight", facecolor=SURFACE)
     plt.close(fig)
