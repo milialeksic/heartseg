@@ -5,6 +5,9 @@ Usage (from repo root):
     python -m medseg.eval fold=all eval.postprocess=lcc     # same, keeping the largest component
     python -m medseg.eval fold=0 split=test                 # held-out test set -- use once, at the end
     python -m medseg.eval fold=all eval.save_pred=true      # also write NIfTI image/gt/pred per case
+    python -m medseg.eval fold=ensemble split=test eval.postprocess=lcc
+        # mean-softmax ensemble of all fold models; test set only, because every CV case
+        # was seen in training by the other fold models
 
 Outputs (in cfg.eval.out_dir):
     <tag>.csv                 per-case metrics
@@ -68,6 +71,15 @@ def keep_largest_component(pred: torch.Tensor) -> torch.Tensor:
     sizes = ndimage.sum(fg, labels, index=range(1, n + 1))
     keep = torch.from_numpy(labels == int(np.argmax(sizes)) + 1).to(pred.dtype)
     return torch.stack([1 - keep, keep]).unsqueeze(0)
+
+
+def ensemble_probs(logits: list[torch.Tensor]) -> torch.Tensor:
+    """Average the class probabilities (softmax over channel dim 1) of several model outputs.
+
+    With a single model this is just its softmax, so argmax is unchanged."""
+    if not logits:
+        raise ValueError("need at least one model output")
+    return torch.stack([torch.softmax(x.float(), dim=1) for x in logits]).mean(dim=0)
 
 
 def case_metrics(
@@ -168,8 +180,9 @@ def _save_nifti(out_dir: Path, case_id: str, image, gt, pred, affine) -> None:
 
 @torch.no_grad()
 def evaluate_ids(
-    cfg, model, ids: list[str], device, fold: int, split: str, case_dir: Path
+    cfg, models: list, ids: list[str], device, fold, split: str, case_dir: Path
 ) -> pd.DataFrame:
+    """Predict and score each case. With several models, their softmax outputs are averaged."""
     cases = list_cases(cfg.data.root)
     items = [{"image": cases[i]["image"], "label": cases[i]["label"], "id": i} for i in ids]
     ds = Dataset(items, get_transforms(cfg.data.spacing, cfg.data.patch_size, train=False))
@@ -184,14 +197,17 @@ def evaluate_ids(
     to_onehot_pred = AsDiscrete(argmax=True, to_onehot=n_cls)
     to_onehot_gt = AsDiscrete(to_onehot=n_cls)
 
-    model.eval()
+    for m in models:
+        m.eval()
     rows = []
     for batch in loader:
         cid = batch["id"][0]
         x = batch["image"].to(device)
         y = batch["label"]
-        out = sliding_window_inference(x, tuple(cfg.data.patch_size), 4, model)
-        pred = to_onehot_pred(out[0]).unsqueeze(0).cpu()
+        probs = ensemble_probs(
+            [sliding_window_inference(x, tuple(cfg.data.patch_size), 4, m) for m in models]
+        )
+        pred = to_onehot_pred(probs[0]).unsqueeze(0).cpu()
         if post == "lcc":
             pred = keep_largest_component(pred)
         gt = to_onehot_gt(y[0]).unsqueeze(0).cpu()

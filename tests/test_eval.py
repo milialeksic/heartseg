@@ -3,7 +3,13 @@ import pandas as pd
 import pytest
 import torch
 
-from medseg.eval import bootstrap_ci, case_metrics, keep_largest_component, summarize
+from medseg.eval import (
+    bootstrap_ci,
+    case_metrics,
+    ensemble_probs,
+    keep_largest_component,
+    summarize,
+)
 
 SPACING = (1.0, 1.0, 1.0)
 
@@ -78,6 +84,32 @@ def test_stray_blob_hurts_hd95_and_lcc_removes_it():
 def test_lcc_is_noop_for_single_component():
     gt = _onehot_cube(4)
     assert torch.equal(keep_largest_component(gt), gt)
+
+
+def test_ensemble_single_model_equals_softmax():
+    logits = torch.randn(1, 2, 4, 4, 4)
+    assert torch.allclose(ensemble_probs([logits]), torch.softmax(logits, dim=1))
+
+
+def test_ensemble_identical_models_unchanged():
+    logits = torch.randn(1, 2, 4, 4, 4)
+    p = ensemble_probs([logits, logits.clone(), logits.clone()])
+    assert torch.allclose(p, torch.softmax(logits, dim=1), atol=1e-6)
+
+
+def test_ensemble_averages_probabilities():
+    # voxel 0: confident foreground (p_fg ~0.98) vs. weak background (p_fg ~0.38) -> mean fg
+    fg_conf = torch.tensor([0.0, 4.0]).view(1, 2, 1, 1, 1)
+    bg_weak = torch.tensor([0.5, 0.0]).view(1, 2, 1, 1, 1)
+    p = ensemble_probs([fg_conf, bg_weak])
+    assert p.shape == (1, 2, 1, 1, 1)
+    assert torch.allclose(p.sum(dim=1), torch.ones(1, 1, 1, 1))
+    assert p[0, 1].item() > 0.5
+
+
+def test_ensemble_requires_models():
+    with pytest.raises(ValueError):
+        ensemble_probs([])
 
 
 def test_bootstrap_ci_contains_mean_and_ignores_nonfinite():
