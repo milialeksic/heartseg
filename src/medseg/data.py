@@ -18,8 +18,8 @@ from monai.transforms import (
     RandRotate90d,
     RandScaleIntensityd,
     RandShiftIntensityd,
-    SpatialPadd,
     Spacingd,
+    SpatialPadd,
 )
 
 from medseg.splits import load_splits, make_splits, save_splits

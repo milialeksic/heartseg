@@ -1,0 +1,31 @@
+seed: 42
+fold: 0              # CV fold to train; override with `fold=1` on the command line
+
+data:
+  root: data/Task02_Heart
+  split_file: configs/splits.json
+  n_test: 4
+  n_folds: 4
+  spacing: [1.25, 1.25, 1.37]
+  patch_size: [96, 96, 96]
+
+model:
+  name: unet            # unet | segresnet
+  out_channels: 2
+
+train:
+  max_epochs: 300
+  batch_size: 2
+  lr: 1.0e-3
+  val_interval: 5
+  amp: true
+
+tracking:
+  experiment: msd-heart
+
+eval:
+  nsd_tolerance_mm: 2.0   # surface tolerance for normalized surface Dice
+  out_dir: outputs/eval   # per-case CSVs (outputs/ is gitignored; medseg.report copies to results/)
+  postprocess: none       # none | lcc (keep largest connected component)
+  save_overlays: true     # PNG slice overlays per case
+  save_pred: false        # NIfTI image/gt/pred per case, for 3D Slicer / ITK-SNAP

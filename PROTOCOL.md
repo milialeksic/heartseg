@@ -14,7 +14,9 @@ Left atrium segmentation, MSD Task02 Heart (mono-modal cardiac MRI, 20 labelled 
 ## Metrics (per case, then mean ± std and bootstrap 95% CI over cases)
 - Dice
 - HD95 (mm)
-- Normalized surface Dice (NSD), tolerance TBD
+- Normalized surface Dice (NSD), tolerance 2 mm
+- Secondary (added after first CV results, see changelog): IoU, precision, recall,
+  ASSD (mm), absolute and relative volume error, number of predicted connected components
 
 ## Models
 1. MONAI UNet (baseline)
@@ -33,4 +35,16 @@ Left atrium segmentation, MSD Task02 Heart (mono-modal cardiac MRI, 20 labelled 
 - Inspect the 5 worst cases per model; record shared traits (size, spacing, artifacts).
 
 ## Changelog
-- (empty)
+- 2026-10-04: First UNet CV results (seed 42, all folds identical settings). Fold 1 plateaued
+  at val Dice ~0.51; fold 2 had good Dice but HD95 > 50 mm. Decided, after seeing CV results,
+  to (a) add secondary metrics incl. connected-component count, and (b) evaluate
+  largest-connected-component post-processing as a separate variant. Both are post-hoc and
+  evaluated on CV only; the original no-post-processing results remain reported. Test set untouched.
+- 2026-10-05: Preprocessing bug found. The configured target spacing (1.25, 1.25, 2.7) mm was
+  assumed, not checked; the raw headers give (1.25, 1.25, 1.37) mm. Resampling therefore halved
+  the resolution of axis 2 for images and labels, and metrics were computed against downsampled
+  labels. Fix: target spacing set to the native (1.25, 1.25, 1.37) mm after verifying it on all
+  cases. All folds are retrained and re-evaluated with identical settings; the earlier runs are
+  kept as "v1" and labelled as affected by this bug. Overlay panel titles changed to neutral
+  axis names because the nominal RAS headers do not match the true anatomy. Test set untouched.
+[text](outputs/eval/unet_fold0_test_lcc.csv) [text](outputs/eval/unet_fold1_test_lcc.csv) [text](outputs/eval/unet_fold2_test_lcc.csv) [text](outputs/eval/unet_fold3_test_lcc.csv) [text](outputs/eval/unet_foldensemble_test_lcc.csv)

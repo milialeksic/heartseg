@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+
 from medseg.data import list_cases, load_or_create_splits
 
 
@@ -19,7 +20,7 @@ def test_list_cases_parses_ids(tmp_path):
     cases = list_cases(root)
     assert len(cases) == 10
     assert "la_000" in cases
-    
+
     assert Path(cases["la_000"]["image"]).parts[-2:] == ("imagesTr", "la_000.nii.gz")
 
 
