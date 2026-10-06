@@ -6,6 +6,7 @@ text in neutral ink, never in series colors; recessive grid.
 
 from __future__ import annotations
 
+import io
 from pathlib import Path
 
 import matplotlib
@@ -13,6 +14,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+from matplotlib.colors import ListedColormap  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 
 SERIES = ["#2a78d6", "#eb6834"]  # slot 1 blue, slot 2 orange
@@ -127,3 +129,80 @@ def per_case_chart(
         )
     fig.savefig(path, dpi=130, bbox_inches="tight", facecolor=SURFACE)
     plt.close(fig)
+
+
+# --- Previews for the web UI (prediction only, no ground truth) ---------------------------
+# Viewer style: images on a dark background whatever the page theme, as in clinical viewers.
+VIEW_BG = "#000000"
+VIEW_TEXT = "#c3c2b7"
+
+
+def _png(fig) -> bytes:
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=100, facecolor=VIEW_BG, bbox_inches="tight", pad_inches=0.02)
+    plt.close(fig)
+    return buf.getvalue()
+
+
+def _draw_prediction(ax, im, m, aspect: float, title: str | None = None, overlay=True) -> None:
+    ax.set_facecolor(VIEW_BG)
+    ax.imshow(im.T, cmap="gray", origin="lower", aspect=aspect, interpolation="nearest")
+    if overlay and m.any():
+        fill = np.ma.masked_where(~m.T, m.T)
+        ax.imshow(
+            fill,
+            cmap=ListedColormap([PRED_COLOR]),
+            alpha=0.28,
+            origin="lower",
+            aspect=aspect,
+            interpolation="nearest",
+        )
+        ax.contour(m.T, levels=[0.5], colors=PRED_COLOR, linewidths=1.6)
+    if title:
+        ax.set_title(title, color=VIEW_TEXT, fontsize=10)
+    ax.axis("off")
+
+
+def render_overview(image: np.ndarray, mask: np.ndarray, spacing) -> bytes:
+    """PNG: three planes through the predicted atrium plus a projection along axis 2."""
+    img = _window(image)
+    m = mask.astype(bool)
+    c = _centroid(m)
+    sx, sy, sz = spacing
+    views = [
+        ("Plane axis 0-1", img[:, :, c[2]], m[:, :, c[2]], sy / sx),
+        ("Plane axis 0-2", img[:, c[1], :], m[:, c[1], :], sz / sx),
+        ("Plane axis 1-2", img[c[0], :, :], m[c[0], :, :], sz / sy),
+        ("Projection along axis 2", img[:, :, c[2]], m.any(2), sy / sx),
+    ]
+    fig, axes = plt.subplots(1, 4, figsize=(14, 4), facecolor=VIEW_BG)
+    for ax, (name, im, mm, aspect) in zip(axes, views, strict=True):
+        _draw_prediction(ax, im, mm, aspect, name)
+    return _png(fig)
+
+
+def render_slices(
+    image: np.ndarray, mask: np.ndarray, spacing, n: int = 21, margin: int = 3
+) -> list[tuple[int, bytes, bytes]]:
+    """Up to n slices along axis 2 spread over the predicted atrium.
+
+    Returns (slice index, PNG with segmentation, PNG without segmentation)."""
+    img = _window(image)
+    m = mask.astype(bool)
+    last = image.shape[2] - 1
+    zs = np.where(m.any(axis=(0, 1)))[0]
+    if len(zs) == 0:
+        lo, hi = 0, last
+    else:
+        lo, hi = max(int(zs.min()) - margin, 0), min(int(zs.max()) + margin, last)
+    sx, sy, _ = spacing
+    out = []
+    for k in np.unique(np.linspace(lo, hi, n).round().astype(int)):
+        pngs = []
+        for overlay in (True, False):
+            fig = plt.figure(figsize=(5, 5), facecolor=VIEW_BG)
+            ax = fig.add_axes([0, 0, 1, 1])
+            _draw_prediction(ax, img[:, :, k], m[:, :, k], sy / sx, overlay=overlay)
+            pngs.append(_png(fig))
+        out.append((int(k), pngs[0], pngs[1]))
+    return out

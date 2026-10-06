@@ -96,6 +96,64 @@ Per-case CSVs: [`results/`](results/) (cross-validation) and [`results/test/`](r
 
 **Model disagreement marks the hard case.** la_009 is under-segmented by all four fold models and is also where they disagree most (Dice 0.763 – 0.823). Disagreement between models is therefore a usable signal for which cases need human review, the basis for model-assisted annotation.
 
+## Robustness to acquisition changes
+
+Simulated scanner and protocol differences, applied to the 16 cross-validation cases (out-of-fold, final pipeline with post-processing). Each image is perturbed after resampling and before intensity normalisation; labels are untouched. Perturbations use [TorchIO](https://torchio.readthedocs.io); the analysis was specified in PROTOCOL.md before running.
+
+| Perturbation | Severity | Dice | Δ Dice vs clean | Worst case | HD95 (mm) |
+|---|---|---|---|---|---|
+| None (clean) | – | 0.882 | – | 0.779 | 8.5 |
+| Gaussian noise (σ, fraction of foreground SD) | 0.05 / 0.1 / 0.2 | 0.882 / 0.879 / 0.872 | −0.001 / −0.003 / −0.011 | 0.733 at 0.2 | 8.5 – 8.9 |
+| Motion (degrees and mm) | 2 / 5 / 10 | 0.881 / 0.880 / 0.882 | ≤ 0.002 | 0.776 | 8.4 – 8.6 |
+| Thicker slices along axis 2 | 2× / 3× / 4× | 0.881 / 0.882 / 0.877 | −0.002 / −0.001 / −0.006 | 0.792 | 8.0 – 8.1 |
+| Gamma (contrast) | −0.3 / +0.3 | 0.869 / 0.877 | −0.013 / −0.005 | 0.748 | 8.8 – 9.0 |
+| **Bias field** | 0.2 / 0.4 / 0.6 | 0.873 / 0.828 / **0.739** | −0.009 / −0.055 / **−0.143** | **0.000** at 0.6 | 9.0 / 10.3 / **18.6** |
+
+**Robust to noise, motion and reduced through-plane resolution.** Even 4× thicker slices or 10° motion change mean Dice by less than 0.01.
+
+**Sensitive to intensity inhomogeneity (bias field).** Moderate bias (0.4) breaks two of sixteen cases (la_016: 0.84 → 0.52; la_007: 0.92 → 0.61); strong bias (0.6) causes a complete failure on la_007 (Dice 0) and a severe one on la_016 (0.23). The failure is case-dependent: most cases stay above 0.85 even at 0.6. Global z-score normalisation cannot undo a smooth spatial brightness variation, and the model partly relies on blood-pool brightness. Bias fields from receiver coils are common in cardiac MRI and differ between scanners, so this is the most relevant robustness gap. Likely remedies are bias-field augmentation during training or N4 bias-field correction in preprocessing; neither was applied, since the test set has been used.
+
+**Post-processing can amplify a failure.** In the la_007 failure the single kept component lies entirely outside the atrium (precision 0): under strong bias the largest predicted region was not the atrium, and keeping only the largest component discarded everything else.
+
+**A confound found and fixed in the analysis itself.** In a first run, noise and motion appeared to *improve* Dice slightly at every severity. They had put non-zero values into the zero-valued area outside the scanned field, which changed the voxels used by the nonzero-only intensity normalisation. After keeping that area at zero (unit-tested), the apparent improvement disappeared and noise showed the expected small, dose-dependent drop. Details in PROTOCOL.md.
+
+Severity levels are a reasonable grid, not calibrated against real scanner differences; the results describe relative sensitivity, not expected performance on a specific external dataset.
+
+Per-case results: [`results/robustness/`](results/robustness/).
+
+## Web app and inference service
+
+The final pipeline (ensemble of the four fold models with largest-component post-processing) is served by a small FastAPI app with a browser interface.
+
+![heartseg web app](results/figures/app_screenshot.png)
+
+Upload a cardiac MRI volume (`.nii` or `.nii.gz`) and the app shows the predicted left atrium volume, image size, voxel spacing and processing time, a slice viewer with the segmentation overlay that can be switched on and off, an overview in three planes, and a download of the mask as NIfTI. The mask is returned in the original image space (same shape and affine as the input), so it overlays directly on the scan in 3D Slicer or ITK-SNAP.
+
+```bash
+uvicorn medseg.api:app --host 127.0.0.1 --port 8000    # needs the trained checkpoints/
+```
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /` | Web interface |
+| `GET /health` | Status: number of models, device, post-processing |
+| `POST /segment` | Upload a NIfTI volume; returns the mask (`.nii.gz`), or a JSON summary with `?output=json` |
+| `GET /docs` | Interactive API documentation |
+
+```bash
+curl -F "file=@la_001.nii.gz" "http://127.0.0.1:8000/segment?output=json"
+curl -F "file=@la_001.nii.gz" http://127.0.0.1:8000/segment -o la_001_mask.nii.gz
+```
+
+A container image is defined in `Dockerfile.serve` (CPU inference; model weights are mounted, not baked in):
+
+```bash
+docker build -f Dockerfile.serve -t heartseg-serve .
+docker run --rm -p 8000:8000 -v "$(pwd)/checkpoints:/app/checkpoints" heartseg-serve
+```
+
+Uploads are processed locally and not stored. This is a research prototype trained on 16 public scans: not a medical device and not for clinical decisions.
+
 ## Lessons learned: a preprocessing bug
 
 The first version (v1) resampled every volume to an assumed spacing of 1.25 × 1.25 × 2.7 mm instead of the native 1.25 × 1.25 × 1.37 mm, halving the resolution along one axis for both images and labels. It produced Dice 0.781 ± 0.194, with one fold failing badly (Dice 0.51, predictions fragmented into hundreds of pieces).
@@ -126,6 +184,8 @@ python -m medseg.eval fold=all eval.postprocess=lcc
 python -m medseg.report outputs/eval/unet_foldall_val.csv \
     outputs/eval/unet_foldall_val_lcc.csv --labels "UNet" "UNet + largest component"
 python -m medseg.eval fold=ensemble split=test eval.postprocess=lcc   # test set, once
+python -m medseg.robustness                             # robustness analysis (CV cases)
+uvicorn medseg.api:app --host 127.0.0.1 --port 8000      # web app at http://127.0.0.1:8000
 mlflow ui --backend-store-uri sqlite:///mlflow.db       # training curves
 ```
 
@@ -143,22 +203,29 @@ src/medseg/
   train.py        training loop with MLflow tracking
   eval.py         per-case metrics, post-processing, ensembling, overlays, NIfTI export
   report.py       results tables and figures
-  viz.py          figure helpers
+  robustness.py   simulated acquisition changes (TorchIO) and paired evaluation
+  inference.py    load the fold models once, segment a new NIfTI, map back to image space
+  api.py          FastAPI service: /, /health, /segment
+  ui.py           web interface (plain HTML, CSS, JavaScript)
+  viz.py          figures and previews
   utils.py        seeding, git provenance
-tests/            unit tests (splits, data, models, metrics, post-processing, ensembling)
-results/          committed per-case CSVs, summary and figures; results/test/ for the test set
+tests/            unit tests (splits, data, models, metrics, post-processing, ensembling,
+                  robustness, inference, API)
+results/          committed per-case CSVs, summary and figures; results/test/ for the test set,
+                  results/robustness/ for the robustness analysis
 PROTOCOL.md       experimental protocol and dated changelog
 ```
 
-Code quality: ruff and pre-commit hooks, GitHub Actions CI (lint and tests), Dockerfile.
+Code quality: ruff and pre-commit hooks, GitHub Actions CI (lint and tests), Dockerfile for
+tests and `Dockerfile.serve` for the web app.
 
 ## Possible extensions
 
-- Robustness to simulated scanner shifts (noise, bias field, resolution, motion)
+- Bias-field augmentation or N4 correction to close the robustness gap above (needs new held-out data to evaluate)
+- Hole filling as additional post-processing (residual internal false negatives, e.g. la_016)
 - Near-duplicate and data quality audit
 - SegResNet and nnU-Net comparison on the same frozen folds
-- Uncertainty from ensemble disagreement for review prioritisation
-- Containerised inference service
+- Uncertainty from ensemble disagreement for review prioritisation, shown in the web app
 
 ## Data and acknowledgements
 

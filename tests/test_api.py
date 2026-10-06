@@ -1,3 +1,4 @@
+import base64
 import gzip
 
 import nibabel as nib
@@ -58,6 +59,32 @@ def test_segment_returns_nifti_mask():
     mask = np.asarray(nib.Nifti1Image.from_bytes(gzip.decompress(r.content)).dataobj)
     assert mask.shape == (4, 4, 4)
     assert mask.sum() == 8
+
+
+def test_index_page_has_upload_form():
+    r = client.get("/")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/html")
+    assert 'id="file"' in r.text
+    assert "/segment?output=preview" in r.text
+
+
+def test_segment_preview_returns_images_and_mask():
+    r = client.post(
+        "/segment?output=preview",
+        files={"file": ("case.nii.gz", _nifti_gz(), "application/gzip")},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["filename"] == "case_mask.nii.gz"
+    assert base64.b64decode(body["overview_png"])[:4] == b"\x89PNG"
+    assert len(body["slices"]) >= 1
+    assert all(base64.b64decode(s["png"])[:4] == b"\x89PNG" for s in body["slices"])
+    assert all(base64.b64decode(s["png_raw"])[:4] == b"\x89PNG" for s in body["slices"])
+    assert body["n_slices_total"] == 4
+    assert body["models"] == 1 and body["postprocess"] == "lcc"
+    mask_img = nib.Nifti1Image.from_bytes(gzip.decompress(base64.b64decode(body["mask_nii_gz"])))
+    assert np.asarray(mask_img.dataobj).sum() == 8
 
 
 def test_rejects_non_nifti():

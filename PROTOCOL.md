@@ -87,3 +87,9 @@ Left atrium segmentation, MSD Task02 Heart (mono-modal cardiac MRI, 20 labelled 
   original image are kept at zero after every perturbation, and no new zeros are created inside
   the scanned area (unit-tested). All conditions are re-run with identical settings; the first
   run is kept but not reported.
+- 2026-10-06: Robustness results (re-run after the fix, 16 CV cases, mean Dice, clean 0.882):
+  noise 0.882 / 0.879 / 0.872; motion 0.881 / 0.880 / 0.882; thicker slices 0.881 / 0.882 /
+  0.877; gamma 0.869 / 0.877; bias field 0.873 / 0.828 / 0.739 (worst case 0.000 at 0.6,
+  la_007). Conclusion: robust to noise, motion and through-plane resolution; sensitive to bias
+  field. As specified, no model, preprocessing or post-processing change is made based on these
+  results; bias-field augmentation or N4 correction is noted as future work.
