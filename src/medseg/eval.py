@@ -1,7 +1,7 @@
 """Per-case evaluation of trained checkpoints.
 
 Usage (from repo root):
-        python -m medseg.eval fold=all                       # out-of-fold results, all CV cases
+    python -m medseg.eval fold=all                       # out-of-fold results, all CV cases
     python -m medseg.eval fold=all eval.postprocess=lcc  # same, keep largest component
     python -m medseg.eval fold=0 split=test              # held-out test set, use once
     python -m medseg.eval fold=all eval.save_pred=true   # also write NIfTI per case
@@ -180,12 +180,24 @@ def _save_nifti(out_dir: Path, case_id: str, image, gt, pred, affine) -> None:
 
 @torch.no_grad()
 def evaluate_ids(
-    cfg, models: list, ids: list[str], device, fold, split: str, case_dir: Path
+    cfg,
+    models: list,
+    ids: list[str],
+    device,
+    fold,
+    split: str,
+    case_dir: Path,
+    transforms=None,
 ) -> pd.DataFrame:
-    """Predict and score each case. With several models, their softmax outputs are averaged."""
+    """Predict and score each case. With several models, their softmax outputs are averaged.
+
+    `transforms` overrides the standard evaluation preprocessing (used by robustness tests).
+    """
     cases = list_cases(cfg.data.root)
     items = [{"image": cases[i]["image"], "label": cases[i]["label"], "id": i} for i in ids]
-    ds = Dataset(items, get_transforms(cfg.data.spacing, cfg.data.patch_size, train=False))
+    if transforms is None:
+        transforms = get_transforms(cfg.data.spacing, cfg.data.patch_size, train=False)
+    ds = Dataset(items, transforms)
     loader = DataLoader(ds, batch_size=1, shuffle=False)
 
     n_cls = int(cfg.model.out_channels)

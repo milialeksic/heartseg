@@ -6,7 +6,7 @@ data:
   split_file: configs/splits.json
   n_test: 4
   n_folds: 4
-  spacing: [1.25, 1.25, 1.37]
+  spacing: [1.25, 1.25, 1.37]   # native spacing of Task02 Heart (checked on raw headers)
   patch_size: [96, 96, 96]
 
 model:
@@ -29,3 +29,19 @@ eval:
   postprocess: none       # none | lcc (keep largest connected component)
   save_overlays: true     # PNG slice overlays per case
   save_pred: false        # NIfTI image/gt/pred per case, for 3D Slicer / ITK-SNAP
+
+serve:                    # uvicorn medseg.api:app
+  folds: [0, 1, 2, 3]     # ensemble members (checkpoints/<model>-fold<k>/best.pt)
+  postprocess: lcc        # final pipeline
+
+robustness:               # python -m medseg.robustness (CV cases only)
+  out_dir: outputs/robustness
+  results_dir: results/robustness
+  postprocess: lcc        # final pipeline
+  kinds: [noise, bias, gamma, motion, lowres]
+  levels:
+    noise: [0.05, 0.1, 0.2]   # noise std as a fraction of foreground intensity std
+    bias: [0.2, 0.4, 0.6]     # bias-field polynomial coefficient size
+    gamma: [-0.3, 0.3]        # log-gamma: contrast change in both directions
+    motion: [2, 5, 10]        # rotation (degrees) and translation (mm)
+    lowres: [2, 3, 4]         # slice-thickness factor along axis 2

@@ -1,0 +1,14 @@
+.git
+.venv
+env
+data
+checkpoints
+checkpoints_v1
+outputs
+mlruns
+mlflow.db
+results
+results_v1
+**/__pycache__
+.pytest_cache
+.ruff_cache

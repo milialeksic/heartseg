@@ -1,0 +1,21 @@
+# Inference service image (CPU). Model weights are not baked in; mount them at run time.
+#
+# Build (from repo root):
+#   docker build -f Dockerfile.serve -t heartseg-serve .
+# Run (PowerShell):
+#   docker run --rm -p 8000:8000 -v "${PWD}/checkpoints:/app/checkpoints" heartseg-serve
+# Then open http://127.0.0.1:8000/docs
+
+FROM python:3.11-slim
+
+WORKDIR /app
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+
+COPY pyproject.toml README.md ./
+COPY src ./src
+RUN pip install --no-cache-dir .
+
+COPY configs ./configs
+
+EXPOSE 8000
+CMD ["uvicorn", "medseg.api:app", "--host", "0.0.0.0", "--port", "8000"]
